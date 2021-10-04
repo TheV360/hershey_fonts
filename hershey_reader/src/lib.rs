@@ -14,8 +14,9 @@ pub struct HersheyChar {
 	
 	/// Number of vertices in character.
 	/// 
-	/// Surprisingly, it includes the left/right hand values
-	/// in its total, despite me storing them separately.
+	/// ~~Surprisingly, it includes the left/right hand values
+	/// in its total, despite me storing them separately.~~
+	/// My API!!! I call the shots!!!
 	pub vertex_num: usize,
 	
 	/// Probably some typography vocab I don't know.
@@ -57,12 +58,12 @@ impl HersheyChar {
 		if id.len() > 8 { return Err(HersheyError::InvalidId); }
 		
 		let id = id.parse::<usize>()
-			.or_else(|x| Err(HersheyError::Parse(x)))?;
+			.map_err(HersheyError::Parse)?;
 		
 		// TODO: hmm does [1..] ever index out of bounds?
 		let vertex_num = s[first_space..first_alpha][1..].trim();
 		let vertex_num = str::parse::<usize>(vertex_num)
-			.or_else(|x| Err(HersheyError::Parse(x)))?;
+			.map_err(HersheyError::Parse)?;
 		
 		// It's my API!!! My rules!!!
 		let vertex_num = vertex_num - 1;
@@ -112,19 +113,35 @@ impl HersheyChar {
 mod tests {
 	use super::*;
 	
+	/*
 	#[test]
 	fn dump_characters_lol() -> Result<(), HersheyError> {
 		use std::fs::read_to_string;
+		use std::fs::File;
+		use std::io::Write;
 		
 		let jhf = read_to_string("../reference/futuram.jhf").expect(":(");
+		let mut out = File::create("../reference/futuram.jhf.txt").expect("complaining");
 		
 		for line in jhf.trim().lines() {
 			let c = HersheyChar::new_from_str(line)?;
-			println!();
+			
+			write!(out,
+				"#{:5} ({:3} vtxs); ✋{:+3} 🤚{:+3} : ",
+				c.id, c.vertex_num, c.left_hand, c.right_hand
+			).unwrap();
+			for vtx in c.vertex_data {
+				match vtx {
+					Some((x, y)) => write!(out, "({:+3}, {:+3}) ", x, y).unwrap(),
+					None => write!(out, "up ").unwrap(),
+				}
+			}
+			writeln!(out, "end").unwrap();
 		}
 		
 		Ok(())
 	}
+	*/
 	
 	#[test]
 	fn decode_a_space() -> Result<(), HersheyError> {
