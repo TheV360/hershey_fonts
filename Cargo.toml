@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+	"hershey_reader",
+	"hershey_viewer"
+]
