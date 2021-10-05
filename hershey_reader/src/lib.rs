@@ -1,4 +1,4 @@
-use std::num::ParseIntError;
+use core::num::ParseIntError;
 
 /// This represents a single character in a Hershey font.
 /// This won't actually reliably have *the actual codepoint it represents*
@@ -44,24 +44,23 @@ pub enum HersheyError {
 impl HersheyChar {
 	/// how do results work.
 	pub fn new_from_str(s: &str) -> Result<Self, HersheyError> {
-		assert!(s.len() >= 10, "doesn't seem to be long enough to be a Hershey character (at least 10 characters)");
+		assert!(s.len() >= 8, "doesn't seem to be long enough to be a Hershey character (at least 4 characters)");
 		
-		// col 0-4 = id number
 		let first_space = s
 			.find(|c: char| c.is_whitespace())
-			.ok_or(HersheyError::InvalidSpacing)?;
+			.ok_or(HersheyError::InvalidSpacing)?
+			.min(5);
 		let first_alpha = s
 			.find(|c: char| !(c.is_whitespace() || c.is_ascii_digit()))
 			.ok_or(HersheyError::InvalidAfterwards)?;
 		
-		let id = &s[0..first_space];
-		if id.len() > 8 { return Err(HersheyError::InvalidId); }
-		
+		// col 0-4 = id number
+		let id = s[0..first_space].trim();
 		let id = id.parse::<usize>()
 			.map_err(HersheyError::Parse)?;
 		
-		// TODO: hmm does [1..] ever index out of bounds?
-		let vertex_num = s[first_space..first_alpha][1..].trim();
+		// col 5-7 = num of vertices
+		let vertex_num = s[first_space..first_alpha].trim();
 		let vertex_num = str::parse::<usize>(vertex_num)
 			.map_err(HersheyError::Parse)?;
 		
@@ -85,7 +84,7 @@ impl HersheyChar {
 		
 		const PEN_UP: [i8; 2] = [-50, 0];
 		// please don't look at this :(
-		for pair in vertices.chunks(2) {
+		for pair in vertices.chunks_exact(2) {
 			if let [x, y] = *pair {
 				vertex_data.push(
 					if pair == PEN_UP { None }
@@ -136,8 +135,8 @@ mod tests {
 		use std::fs::File;
 		use std::io::Write;
 		
-		let jhf = read_to_string("../reference/futuram.jhf").expect(":(");
-		let mut out = File::create("../reference/futuram.jhf.txt").expect("complaining");
+		let jhf = read_to_string("../reference/futuram.jhf")?;
+		let mut out = File::create("../reference/futuram.jhf.txt")?;
 		
 		for line in jhf.trim().lines() {
 			let c = HersheyChar::new_from_str(line)?;
@@ -162,14 +161,61 @@ mod tests {
 	#[test]
 	fn decode_a_space() -> Result<(), HersheyError> {
 		// Space character
-		let space = "12345  1JZ";
-		let c = HersheyChar::new_from_str(space)?;
+		const CHR: &str = "12345  1JZ";
+		
+		let c = HersheyChar::new_from_str(CHR);
+		let c = c?;
 		
 		assert_eq!(c.id, 12345);
 		assert_eq!(c.vertex_num, 0);
 		assert_eq!(c.left_hand, -8);
 		assert_eq!(c.right_hand, 8);
 		assert!(c.vertex_data.is_empty());
+		
+		Ok(())
+	}
+	
+	#[test]
+	fn wackier_space() -> Result<(), HersheyError> {
+		// Incorrect/nonstandard/whatever-you-wanna-call-it
+		
+		// Space-obsessed space character
+		const CHR: &str = "3    1 JZ";
+		
+		let c = HersheyChar::new_from_str(CHR);
+		let c = c?;
+		
+		assert_eq!(c.id, 3);
+		assert_eq!(c.vertex_num, 0);
+		assert_eq!(c.left_hand, -8);
+		assert_eq!(c.right_hand, 8);
+		assert!(c.vertex_data.is_empty());
+		
+		Ok(())
+	}
+	
+	#[test]
+	fn something_else() -> Result<(), HersheyError> {
+		const CHR: &str = " 2715 58I\\LKLJMHNGQFTFWGXHYJYLXNWOUPRQ RLKMKMJNHQGTGWHXJXLWNUORP RMIPG RUGXI RXMTP RRPRTSTSP RRXQYQZR[S[TZTYSXRX RRYRZSZSYRY";
+		
+		let c = HersheyChar::new_from_str(CHR);
+		let c = c?;
+		
+		assert_eq!(c.id, 2715);
+		assert_eq!(c.vertex_num, 58 - 1); // i forgot about me setting my own rules
+		
+		Ok(())
+	}
+	
+	#[test]
+	fn the_gosh_darned_8() -> Result<(), HersheyError> {
+		const CHR: &str = "12345104H]SFPGOHNJNMOOQPTPWOYNZLZIYGWFSF RUFPG RPHOJONPO ROORP RSPWO RXNYLYIXG RYGUF RSFQHPJPNQP RTPVOWNXLXHWF RQPMQKSJUJXKZN[R[VZWYXWXTWRVQTP RRPMQ RNQLSKUKXLZ RKZP[VZ RVYWWWTVR RVQSP RQPOQMSLULXMZN[ RR[TZUYVWVSUQTP";
+		
+		let c = HersheyChar::new_from_str(CHR);
+		let c = c?;
+		
+		assert_eq!(c.id, 12345);
+		assert_eq!(c.vertex_num, 104 - 1);
 		
 		Ok(())
 	}
