@@ -1,0 +1,25 @@
+scratchpad
+
+decode_a_space
+12345  1JZ
+
+wackier_space
+3    1 JZ
+
+something_else
+ 2715 58I\\LKLJMHNGQFTFWGXHYJYLXNWOUPRQ RLKMKMJNHQGTGWHXJXLWNUORP RMIPG RUGXI RXMTP RRPRTSTSP RRXQYQZR[S[TZTYSXRX RRYRZSZSYRY
+
+the_gosh_darned_8
+12345104H]SFPGOHNJNMOOQPTPWOYNZLZIYGWFSF RUFPG RPHOJONPO ROORP RSPWO RXNYLYIXG RYGUF RSFQHPJPNQP RTPVOWNXLXHWF RQPMQKSJUJXKZN[R[VZWYXWXTWRVQTP RRPMQ RNQLSKUKXLZ RKZP[VZ RVYWWWTVR RVQSP RQPOQMSLULXMZN[ RR[TZUYVWVSUQTP
+
+
+so uh first bit has leading whitespace and number, and those have a max length of
+ 5 combined. if it's 6+, that 6th item is the start of the vertex count.
+
+
+i drew my coloring book page, and now i grok things. id will always always always be in the first 5 characters.
+
+get slice of 5
+slice > trim start
+slice > find first space and if found remove everything afterwards, inclusive
+you have it ! the id.

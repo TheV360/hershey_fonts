@@ -48,51 +48,46 @@ impl HersheyChar {
 	/// how do results work.
 	pub fn new_from_str(s: &str) -> Result<Self, HersheyError> {
 		// oh dear god what did i do
+		// todo: well it's not unicode friendly
+		
+		if s.len() < 8 { return Err(HersheyError::TooShort); }
 		
 		// col 0-4 = id number
-		let id = s[0..5]
-			.trim_start();
-		let id = id.find(char::is_whitespace)
-			.map(|i| &id[0..i])
-			.unwrap_or(id)
+		let id = s[0..5].trim()
 			.parse::<usize>()
 			.map_err(HersheyError::Parse)?;
 		
-		// dbg!(id);
+		// "r"est of the "s"tring
+		let s = &s[5..];
 		
-		let s = s.trim(); // id is not gone, it's just invalid now
-		
-		let next_space = s
-			.find(char::is_whitespace)
-			.ok_or(HersheyError::InvalidSpacing)?
-			.min(5);
-		let first_alpha = s
-			.find(|c: char| !(c.is_whitespace() || c.is_ascii_digit()))
-			.ok_or(HersheyError::InvalidAfterwards)?;
-		
-		// println!("_: {}, a: {}", next_space, first_alpha);
+		let early_end = s[0..3]
+			.find(|c: char| !(c.is_ascii_digit() || c.is_ascii_whitespace()))
+			.unwrap_or(3);
 		
 		// col 5-7 = num of vertices
-		let vertex_num = s[next_space..first_alpha].trim();
-		let vertex_num = str::parse::<usize>(vertex_num)
+		let vertex_num = s[0..early_end].trim()
+			.parse::<usize>()
 			.map_err(HersheyError::Parse)?;
 		
-		// It's my API!!! My rules!!!
-		let vertex_num = vertex_num.saturating_sub(1);
+		if vertex_num < 1 { return Err(HersheyError::TooShort); }
 		
 		// "r"est of the "s"tring
-		let r = &s[first_alpha..];
+		let s = &s[early_end..];
 		
-		let mut char_sludge = r[..2].chars();
+		let mut char_sludge = s[..2].chars();
 		
 		let left_hand = Self::parse_ascii_ofs(char_sludge.next()
 			.ok_or(HersheyError::TooShort)?);
 		let right_hand = Self::parse_ascii_ofs(char_sludge.next()
 			.ok_or(HersheyError::TooShort)?);
 		
-		let r = &r[2..];
+		// ok cool
+		let s = &s[2..];
 		
-		let vertices: Vec<_> = r.chars().map(Self::parse_ascii_ofs).collect();
+		// It's my API!!! My rules!!!
+		let vertex_num = vertex_num.saturating_sub(1);
+		
+		let vertices: Vec<_> = s.chars().map(Self::parse_ascii_ofs).collect();
 		let mut vertex_data = Vec::with_capacity(vertex_num);
 		
 		const PEN_UP: [i8; 2] = [-50, 0];
@@ -104,7 +99,7 @@ impl HersheyChar {
 					else { Some((x, y)) }
 				);
 			} else {
-				unreachable!("fuck yo u");
+				panic!("what the really hell");
 			}
 		}
 		
@@ -216,6 +211,7 @@ mod tests {
 		
 		assert_eq!(c.id, 2715);
 		assert_eq!(c.vertex_num, 58 - 1); // i forgot about me setting my own rules
+		assert_eq!(c.vertex_data.iter().filter(|v| v.is_none()).count(), 7);
 		
 		Ok(())
 	}
