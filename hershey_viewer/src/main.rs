@@ -37,10 +37,8 @@ fn main() -> std::io::Result<()> {
 					fonts.push((filename, font));
 					success = true;
 				}
-				
-			} else {
-				
 			}
+			
 			println!(
 				"{} `{}`.",
 				if success { "Loaded" } else { "Skipped" },
@@ -49,7 +47,7 @@ fn main() -> std::io::Result<()> {
 		}
 	}
 	
-	let mut buffer: Box<[u32]> = vec![0x201d1au32; WIDTH * HEIGHT]
+	let mut buffer: Box<[u32]> = vec![0x201d1a; WIDTH * HEIGHT]
 		.into_boxed_slice();
 	
 	let mut win = Window::new(
@@ -59,10 +57,41 @@ fn main() -> std::io::Result<()> {
 			..Default::default()
 		}
 	).unwrap();
+	win.limit_update_rate(Some(core::time::Duration::from_secs_f64(1.0/72.0)));
 	
 	let mut cur_font = 0;
 	let mut cur_char = 0;
 	let mut mouse = (0, 0);
+	
+	let mut specimen = "the quick brown fox jumped\nover the lazy dog\nTHE QUICK BROWN FOX JUMPED\nOVER THE LAZY DOG\n(0123456789)\n<HTML> ? @".to_string();
+	
+	fn key_to_char(k: Key) -> Option<char> {
+		let kc = k as u8;
+		match (k, kc) {
+			(_,  0..= 9) => Some((b'0' +  kc      ) as char),
+			(_, 10..=35) => Some((b'a' + (kc - 10)) as char),
+			
+			(Key::Space, _) => Some(' '),
+			
+			(Key::Backslash, _) => Some('\\'),
+			(Key::Comma, _) => Some(','),
+			(Key::Equal, _) => Some('='),
+			(Key::LeftBracket, _) => Some('['),
+			(Key::Minus, _) => Some('-'),
+			(Key::Period, _) => Some('.'),
+			(Key::RightBracket, _) => Some(']'),
+			(Key::Semicolon, _) => Some(';'),
+			(Key::Slash, _) => Some('/'),
+			
+			(Key::Backspace, _) => Some('\x08'),
+			(Key::Delete, _) => Some('\x7F'),
+			(Key::Enter, _) => Some('\n'),
+			
+			_ => None
+		}
+	}
+	
+	// I did not go into this intending to make this code good. Sorry
 	
 	while win.is_open() {
 		if let Some((x, y)) = win.get_mouse_pos(minifb::MouseMode::Pass) {
@@ -70,13 +99,8 @@ fn main() -> std::io::Result<()> {
 		}
 		let mouse = (mouse.0 + 48, mouse.1);
 		
-		// let a = (1, y % HEIGHT as isize);
-		// let b = (WIDTH as isize - 1, HEIGHT as isize - 4);
-		
-		// draw_line(&mut buffer, a, b, 0x363430);
-		// y += 1;
-		
-		buffer.fill(0);
+		// Clear screen.
+		buffer.fill(0x201d1a);
 		
 		let (a, b) =
 		if win.get_mouse_down(minifb::MouseButton::Left) {
@@ -85,9 +109,38 @@ fn main() -> std::io::Result<()> {
 			(mouse, (64, 96))
 		};
 		
+		let shift = win.is_key_down(Key::LeftShift) || win.is_key_down(Key::RightShift);
+		if let Some(keys) = win.get_keys_pressed(minifb::KeyRepeat::Yes) {
+			for k in keys {
+				if let Some(ch) = key_to_char(k) {
+					if ch == '\x08' {
+						specimen.pop();
+					} else {
+						specimen.push(if shift { ch.to_ascii_uppercase() } else { ch });
+					}
+				}
+			}
+		}
+		
+		// const COOL_COLORS: [u32; 8] = [0xFFFFFF, 0xFB4934, 0xFE8019, 0xFABD2F, 0xB8BB26, 0x8EC07C, 0x83A598, 0xD3869B];
+		const COOL_COLORS: [u32; 8] = [0xFFFFFF, 0xCC241D, 0xD65D0E, 0xD79921, 0x98971A, 0x689D6A, 0x458588, 0xB16286];
+		
 		draw_hershey_char(&mut buffer, &fonts[cur_font].1[cur_char], a, 3, 0xFFEFEA);
 		draw_hershey_str(&mut buffer, &fonts[5].1, &format!("{} (#{}) ch{}", fonts[cur_font].0, cur_font, cur_char), (a.0 + 128, a.1), 1, 0xFFEFEA);
-		draw_hershey_str(&mut buffer, &fonts[cur_font].1, "the quick brown fox jumped\nover the lazy dog\nTHE QUICK BROWN FOX JUMPED\nOVER THE LAZY DOG\n(0123456789)\n<HTML> ? @", b, 2, 0xFFEFEA);
+		
+		/*for (col_index, &color) in COOL_COLORS.iter().enumerate().rev() {
+			let col_distance = col_index as isize;
+			let b = (b.0 + col_distance, b.1 + col_distance);
+			draw_hershey_str(
+				&mut buffer, &fonts[cur_font].1,
+				&specimen,
+				b, 2,
+				color
+			);
+		}
+		draw_hershey_str(&mut buffer, &fonts[cur_font].1, &specimen, (b.0 + 1, b.1), 2, COOL_COLORS[0]);
+		draw_hershey_str(&mut buffer, &fonts[cur_font].1, &specimen, (b.0, b.1 + 1), 2, COOL_COLORS[0]);*/
+		draw_hershey_str(&mut buffer, &fonts[cur_font].1, &specimen, b, 2, COOL_COLORS[0]);
 		
 		if cur_font > 0 && win.is_key_pressed(Key::Up, minifb::KeyRepeat::Yes) { cur_font -= 1; }
 		if cur_font < fonts.len() - 1 && win.is_key_pressed(Key::Down, minifb::KeyRepeat::Yes) {
@@ -125,8 +178,7 @@ fn draw_line(buf: &mut Box<[u32]>, a: Vec2, b: Vec2, c: u32) {
 	if !(vec2_within(a) && vec2_within(b)) { return; }
 	
 	for p in Line::new(a, b) { unsafe {
-		let i = vec2_to_index(p);
-		*buf.get_unchecked_mut(i) = c;
+		*buf.get_unchecked_mut(vec2_to_index(p)) = c;
 	} }
 }
 
@@ -144,6 +196,13 @@ fn draw_hershey_char(buf: &mut Box<[u32]>, chr: &HersheyChar, p: Vec2, s: isize,
 		}
 		pen_prev = v.map(v2i8_to_vec2);
 	}
+	
+	let vofs = s * 4;
+	let lh = (chr.left_hand as isize * s + p.0, p.1 + vofs);
+	let rh = (chr.right_hand as isize * s + p.0, p.1 + vofs);
+	draw_line(buf, lh, rh, 0x808080);
+	draw_line(buf, (lh.0, lh.1 - s), (lh.0, lh.1 + s), 0x808080);
+	draw_line(buf, (rh.0, rh.1 - s), (rh.0, rh.1 + s), 0x808080);
 }
 
 fn draw_hershey_str(buf: &mut Box<[u32]>, font: &[HersheyChar], st: &str, p: Vec2, s: isize, c: u32) {

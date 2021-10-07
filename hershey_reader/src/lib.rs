@@ -32,40 +32,53 @@ pub struct HersheyChar {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// I don't know how to make error `enum`s that don't suck / aren't redundant.
 pub enum HersheyError {
 	InvalidSpacing,
 	InvalidAfterwards,
 	InvalidId,
 	TooShort,
 	Parse(ParseIntError),
+	
+	/// make it stop
 	MakeItStop,
 }
 
 impl HersheyChar {
 	/// how do results work.
 	pub fn new_from_str(s: &str) -> Result<Self, HersheyError> {
-		assert!(s.len() >= 8, "doesn't seem to be long enough to be a Hershey character (at least 4 characters)");
+		// oh dear god what did i do
 		
-		let first_space = s
-			.find(|c: char| c.is_whitespace())
+		// col 0-4 = id number
+		let id = s[0..5]
+			.trim_start();
+		let id = id.find(char::is_whitespace)
+			.map(|i| &id[0..i])
+			.unwrap_or(id)
+			.parse::<usize>()
+			.map_err(HersheyError::Parse)?;
+		
+		// dbg!(id);
+		
+		let s = s.trim(); // id is not gone, it's just invalid now
+		
+		let next_space = s
+			.find(char::is_whitespace)
 			.ok_or(HersheyError::InvalidSpacing)?
 			.min(5);
 		let first_alpha = s
 			.find(|c: char| !(c.is_whitespace() || c.is_ascii_digit()))
 			.ok_or(HersheyError::InvalidAfterwards)?;
 		
-		// col 0-4 = id number
-		let id = s[0..first_space].trim();
-		let id = id.parse::<usize>()
-			.map_err(HersheyError::Parse)?;
+		// println!("_: {}, a: {}", next_space, first_alpha);
 		
 		// col 5-7 = num of vertices
-		let vertex_num = s[first_space..first_alpha].trim();
+		let vertex_num = s[next_space..first_alpha].trim();
 		let vertex_num = str::parse::<usize>(vertex_num)
 			.map_err(HersheyError::Parse)?;
 		
 		// It's my API!!! My rules!!!
-		let vertex_num = vertex_num - 1;
+		let vertex_num = vertex_num.saturating_sub(1);
 		
 		// "r"est of the "s"tring
 		let r = &s[first_alpha..];
