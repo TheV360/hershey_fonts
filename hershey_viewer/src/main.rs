@@ -1,10 +1,8 @@
-use std::default;
-use std::fs::{File, read_dir, read_to_string};
+use std::fs::{read_dir, read_to_string};
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
 
 use minifb::{Scale, Window, WindowOptions, Key};
-use nanorand::{Rng, WyRand};
+use nanorand::WyRand;
 
 use hershey_reader::*;
 
@@ -15,11 +13,19 @@ mod bresenham;
 use bresenham::*;
 
 fn main() -> std::io::Result<()> {
-	let look_in = &std::env::args().nth(1)
-		.unwrap_or_else(||"hershey_viewer/fonts/".to_string());
+	let look_in = &std::env::args_os().nth(1)
+		.or_else(|| std::env::var_os("HERSHEY_FONTS_DIR"))
+		.unwrap_or_else(||"fonts/".into());
+		// ^^^^^^^^^^^^ can remove this last line if you're
+		// putting the viewer somewhere that isn't this repository
 	let mut fonts: Vec<(String, Vec<HersheyChar>)> = Vec::new();
 	
-	for entry in read_dir(look_in)? {
+	let dir = read_dir(look_in)
+		.map_err(|dir|{
+			println!("i need some fonts to view.\nsupply a directory of .jhf fonts as my first arg?\n\nanyway here's the ugly error:");
+		dir})?;
+	
+	for entry in dir {
 		let entry = entry?;
 		let path = entry.path();
 		let mut success = false;
@@ -53,11 +59,8 @@ fn main() -> std::io::Result<()> {
 			);
 		}
 	}
-	if fonts.is_empty() {
-		println!("i need some fonts to view.\nsupply a path to some .jhf fonts as my first arg?");
-		return Ok(()); // sloppy i know
-	}
 	
+	/*
 	#[derive(Debug, Clone, Copy, Default)]
 	struct BoundBox {
 		left: f64, right: f64,
@@ -98,7 +101,6 @@ fn main() -> std::io::Result<()> {
 		}
 	}
 	
-	/*
 	let mut bb_totaltotal = BoundBox::default();
 	
 	for (fname, font) in fonts.iter() {

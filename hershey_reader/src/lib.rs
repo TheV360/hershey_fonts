@@ -33,22 +33,21 @@ pub struct HersheyChar {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// I don't know how to make error `enum`s that don't suck / aren't redundant.
+/// TODO: become good
 pub enum HersheyError {
 	InvalidSpacing,
 	InvalidAfterwards,
 	InvalidId,
 	TooShort,
+	MalformedVertices,
 	Parse(ParseIntError),
-	
-	/// make it stop
-	MakeItStop,
 }
 
 impl HersheyChar {
 	/// how do results work.
 	pub fn new_from_str(s: &str) -> Result<Self, HersheyError> {
 		// oh dear god what did i do
-		// todo: well it's not unicode friendly
+		// TODO: well it's not unicode friendly
 		
 		if s.len() < 8 { return Err(HersheyError::TooShort); }
 		
@@ -57,9 +56,12 @@ impl HersheyChar {
 			.parse::<usize>()
 			.map_err(HersheyError::Parse)?;
 		
-		// "r"est of the "s"tring
+		// Move ID number out of the slice (relatively speaking)
 		let s = &s[5..];
 		
+		// Sometimes (rarely) the vertex count is ended early with a non-
+		// whitespace/digit character. Otherwise, the vertex count is
+		// three characters long always.
 		let early_end = s[0..3]
 			.find(|c: char| !(c.is_ascii_digit() || c.is_ascii_whitespace()))
 			.unwrap_or(3);
@@ -71,21 +73,22 @@ impl HersheyChar {
 		
 		if vertex_num < 1 { return Err(HersheyError::TooShort); }
 		
-		// "r"est of the "s"tring
+		// Move vertex count out of the slice (again, relatively speaking)
 		let s = &s[early_end..];
 		
-		let mut char_sludge = s[..2].chars();
-		
-		let left_hand = Self::parse_ascii_ofs(char_sludge.next()
+		// Get left/right hand values. They're both 1 char long.
+		let left_hand = Self::parse_ascii_ofs(s.chars().next()
 			.ok_or(HersheyError::TooShort)?);
-		let right_hand = Self::parse_ascii_ofs(char_sludge.next()
+		let right_hand = Self::parse_ascii_ofs(s.chars().nth(1)
 			.ok_or(HersheyError::TooShort)?);
 		
-		// ok cool
+		// ok cool we're past that
 		let s = &s[2..];
 		
-		// It's my API!!! My rules!!!
+		// The format counts left/right hand values as being 1 vertex,
+		// which I think is wrong. I compensate for this by suptractign 1.
 		let vertex_num = vertex_num.saturating_sub(1);
+		// "It's my API!!! My rules!!!" - said before allocating usize::MAX
 		
 		let vertices: Vec<_> = s.chars().map(Self::parse_ascii_ofs).collect();
 		let mut vertex_data = Vec::with_capacity(vertex_num);
@@ -99,7 +102,7 @@ impl HersheyChar {
 					else { Some((x, y)) }
 				);
 			} else {
-				panic!("what the really hell");
+				return Err(HersheyError::MalformedVertices);
 			}
 		}
 		
@@ -204,7 +207,7 @@ mod tests {
 	
 	#[test]
 	fn something_else() -> Result<(), HersheyError> {
-		const CHR: &str = " 2715 58I\\LKLJMHNGQFTFWGXHYJYLXNWOUPRQ RLKMKMJNHQGTGWHXJXLWNUORP RMIPG RUGXI RXMTP RRPRTSTSP RRXQYQZR[S[TZTYSXRX RRYRZSZSYRY";
+		const CHR: &str = r" 2715 58I\LKLJMHNGQFTFWGXHYJYLXNWOUPRQ RLKMKMJNHQGTGWHXJXLWNUORP RMIPG RUGXI RXMTP RRPRTSTSP RRXQYQZR[S[TZTYSXRX RRYRZSZSYRY";
 		
 		let c = HersheyChar::new_from_str(CHR);
 		let c = c?;
@@ -218,7 +221,7 @@ mod tests {
 	
 	#[test]
 	fn the_gosh_darned_8() -> Result<(), HersheyError> {
-		const CHR: &str = "12345104H]SFPGOHNJNMOOQPTPWOYNZLZIYGWFSF RUFPG RPHOJONPO ROORP RSPWO RXNYLYIXG RYGUF RSFQHPJPNQP RTPVOWNXLXHWF RQPMQKSJUJXKZN[R[VZWYXWXTWRVQTP RRPMQ RNQLSKUKXLZ RKZP[VZ RVYWWWTVR RVQSP RQPOQMSLULXMZN[ RR[TZUYVWVSUQTP";
+		const CHR: &str = r"12345104H]SFPGOHNJNMOOQPTPWOYNZLZIYGWFSF RUFPG RPHOJONPO ROORP RSPWO RXNYLYIXG RYGUF RSFQHPJPNQP RTPVOWNXLXHWF RQPMQKSJUJXKZN[R[VZWYXWXTWRVQTP RRPMQ RNQLSKUKXLZ RKZP[VZ RVYWWWTVR RVQSP RQPOQMSLULXMZN[ RR[TZUYVWVSUQTP";
 		
 		let c = HersheyChar::new_from_str(CHR);
 		let c = c?;
@@ -227,5 +230,27 @@ mod tests {
 		assert_eq!(c.vertex_num, 104 - 1);
 		
 		Ok(())
+	}
+	
+	// Make sure I can read every font without error.
+	// I panic if I can't find my files. That's fine.
+	#[test]
+	fn read_all_fonts() {
+		use std::fs::{read_dir, read_to_string};
+		use std::ffi::OsStr;
+		
+		for entry in read_dir("../fonts/").unwrap() {
+			let path = entry.unwrap().path();
+			
+			if path.is_file()
+			&& path.extension().map(OsStr::to_str).flatten() == Some("jhf") {
+				let chr = read_to_string(path).unwrap();
+				let chr = chr.trim();
+				
+				for line in chr.lines() {
+					assert!(HersheyChar::new_from_str(line).is_ok(), "Failed to parse! This is an issue with the parser!");
+				}
+			}
+		}
 	}
 }
