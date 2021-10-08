@@ -1,6 +1,5 @@
 use std::fs::{read_dir, read_to_string};
 use std::ffi::OsStr;
-use std::time::Duration;
 
 use minifb::{Scale, Window, WindowOptions, Key};
 // use nanorand::WyRand;
@@ -12,19 +11,27 @@ const HEIGHT: usize = 720;
 
 mod bresenham;
 use bresenham::*;
+			
+// const COOL_COLORS: [u32; 8] = [0xFFFFFF, 0xFB4934, 0xFE8019, 0xFABD2F, 0xB8BB26, 0x8EC07C, 0x83A598, 0xD3869B];
+const COOL_COLORS: [u32; 8] = [0xFFFFFF, 0xCC241D, 0xD65D0E, 0xD79921, 0x98971A, 0x689D6A, 0x458588, 0xB16286];
 
 fn main() -> std::io::Result<()> {
 	let look_in = &std::env::args_os().nth(1)
 		.or_else(|| std::env::var_os("HERSHEY_FONTS_DIR"))
-		.unwrap_or_else(||"fonts/".into());
-		// ^^^^^^^^^^^^ can remove this last line if you're
-		// putting the viewer somewhere that isn't this repository
+		.unwrap_or_else(|| {
+			println!("Falling back to default font directory (the one inside this repository)");
+			"fonts/".into()
+		});
 	let mut fonts: Vec<(String, Vec<HersheyChar>)> = Vec::new();
 	
 	let dir = read_dir(look_in)
-		.map_err(|dir|{
-			println!("i need some fonts to view.\nsupply a directory of .jhf fonts as my first arg?\n\nanyway here's the ugly error:");
-		dir})?;
+		.map_err(|dir| {
+			println!(r"i need some fonts to view.
+			supply a directory of .jhf fonts as my first arg?
+			
+			anyway here's the ugly error:");
+			dir
+		})?;
 	
 	for entry in dir {
 		let entry = entry?;
@@ -53,80 +60,10 @@ fn main() -> std::io::Result<()> {
 				}
 			}
 			
-			println!(
-				"{} `{}`.",
-				if success { "Loaded" } else { "Skipped" },
-				path.to_string_lossy()
-			);
+			let success = if success { "Loaded" } else { "Skipped" };
+			println!("{} `{}`.", success, path.to_string_lossy());
 		}
 	}
-	
-	/*
-	#[derive(Debug, Clone, Copy, Default)]
-	struct BoundBox {
-		left: f64, right: f64,
-		top: f64, bottom: f64,
-	}
-	impl BoundBox {
-		fn add_vec(self, v: (f64, f64)) -> Self {
-			BoundBox {
-				left:   self.left  .min(v.0),
-				right:  self.right .max(v.0),
-				top:    self.top   .min(v.1),
-				bottom: self.bottom.max(v.1),
-			}
-		}
-		fn add(self, o: Self) -> Self {
-			BoundBox {
-				left:   self.left  .min(o.left  ),
-				right:  self.right .max(o.right ),
-				top:    self.top   .min(o.top   ),
-				bottom: self.bottom.max(o.bottom),
-			}
-		}
-		fn div_scalar(self, s: f64) -> Self {
-			BoundBox {
-				left:   self.left   / s,
-				right:  self.right  / s,
-				top:    self.top    / s,
-				bottom: self.bottom / s,
-			}
-		}
-		fn total(self, o: Self) -> Self {
-			BoundBox {
-				left:   self.left   + o.left  ,
-				right:  self.right  + o.right ,
-				top:    self.top    + o.top   ,
-				bottom: self.bottom + o.bottom,
-			}
-		}
-	}
-	
-	let mut bb_totaltotal = BoundBox::default();
-	
-	for (fname, font) in fonts.iter() {
-		let mut bb_runtotal = BoundBox::default();
-		let mut bb = BoundBox::default();
-		
-		for chr in font.iter() {
-			let bb_chr = chr.vertex_data.iter()
-				.flatten()
-				.map(|(x, y)| (*x as f64, *y as f64))
-				.fold(BoundBox::default(), BoundBox::add_vec);
-			
-			bb = bb.add(bb_chr);
-			bb_runtotal = bb_runtotal.total(bb_chr);
-		}
-		
-		bb_runtotal = bb_runtotal.div_scalar(font.len() as f64);
-		bb_totaltotal = bb_totaltotal.add(bb);
-		
-		dbg!(fname, bb, bb_runtotal);
-	}
-	dbg!(bb_totaltotal);
-	*/
-	
-	// let mut rng = WyRand::new();
 	
 	let mut buffer: Box<[u32]> = vec![0x201d1a; WIDTH * HEIGHT]
 		.into_boxed_slice();
@@ -138,19 +75,14 @@ fn main() -> std::io::Result<()> {
 			..Default::default()
 		}
 	).unwrap();
-	// win.limit_update_rate(Some(Duration::from_secs_f64(72.0f64.recip())));
-	
-	let mut cur_font = 0;
-	let mut cur_char = 0;
-	let mut mouse = (0, 0);
 	
 	let mut specimen = r"
-	the quick brown fox jumped
-	over the lazy dog
-	THE QUICK BROWN FOX JUMPED
-	OVER THE LAZY DOG
-	(0123456789)
-	<HTML> ? @
+the quick brown fox jumped
+over the lazy dog
+THE QUICK BROWN FOX JUMPED
+OVER THE LAZY DOG
+(0123456789)
+<HTML> ? @
 	".trim().to_string();
 	
 	// hardcoded US A layout. sorry.
@@ -165,17 +97,28 @@ fn main() -> std::io::Result<()> {
 			
 			(_, Key::Space, _) => Some(' '),
 			
-			(_, Key::Apostrophe, _) => Some('\''),
-			(_, Key::Backquote, _) => Some('`'),
-			(_, Key::Backslash, _) => Some('\\'),
-			(_, Key::Comma, _) => Some(','),
-			(_, Key::Equal, _) => Some('='),
-			(_, Key::LeftBracket, _) => Some('['),
-			(_, Key::Minus, _) => Some('-'),
-			(_, Key::Period, _) => Some('.'),
-			(_, Key::RightBracket, _) => Some(']'),
-			(_, Key::Semicolon, _) => Some(';'),
-			(_, Key::Slash, _) => Some('/'),
+			(false, Key::Apostrophe, _) => Some('\''),
+			( true, Key::Apostrophe, _) => Some('"'),
+			(false, Key::Backquote, _) => Some('`'),
+			( true, Key::Backquote, _) => Some('~'),
+			(false, Key::Backslash, _) => Some('\\'),
+			( true, Key::Backslash, _) => Some('|'),
+			(false, Key::Comma, _) => Some(','),
+			( true, Key::Comma, _) => Some('<'),
+			(false, Key::Equal, _) => Some('='),
+			( true, Key::Equal, _) => Some('+'),
+			(false, Key::LeftBracket, _) => Some('['),
+			( true, Key::LeftBracket, _) => Some('{'),
+			(false, Key::Minus, _) => Some('-'),
+			( true, Key::Minus, _) => Some('_'),
+			(false, Key::Period, _) => Some('.'),
+			( true, Key::Period, _) => Some('>'),
+			(false, Key::RightBracket, _) => Some(']'),
+			( true, Key::RightBracket, _) => Some('}'),
+			(false, Key::Semicolon, _) => Some(';'),
+			( true, Key::Semicolon, _) => Some(':'),
+			(false, Key::Slash, _) => Some('/'),
+			( true, Key::Slash, _) => Some('?'),
 			
 			(_, Key::Backspace, _) => Some('\x08'),
 			(_, Key::Delete, _) => Some('\x7F'),
@@ -185,52 +128,89 @@ fn main() -> std::io::Result<()> {
 		}
 	}
 	
-	let ui_font = &fonts.get(5.min(fonts.len()));
+	
+	enum Page {
+		Help,
+		Specimen,
+		Map
+	}
+	impl Page {
+		fn back(self) -> Self {
+			use Page::*;
+			match self {
+				Help => Map,
+				Specimen => Help,
+				Map => Specimen,
+			}
+		}
+		fn next(self) -> Self {
+			use Page::*;
+			match self {
+				Help => Specimen,
+				Specimen => Map,
+				Map => Help,
+			}
+		}
+		fn get_name(&self) -> &'static str {
+			use Page::*;
+			match self {
+				Help => "Help",
+				Specimen => "Specimen",
+				Map => "Character Map",
+			}
+		}
+	}
+	
+	let ui_font = &fonts.iter()
+		.find(|(name, _)| name == "futural.jhf")
+		.unwrap_or_else(|| fonts.first().unwrap())
+		.1;
+	
+	let mut cur_char = 0;
+	let mut cur_font = 0;
+	let mut cur_page = Page::Help;
+	let mut font_size = 1.0;
 	let mut redraw = true; // hastily added
+	
+	// gonna use this for gfx buttons
+	let mut mouse = (0, 0);
+	let (mut mouse_click, mut mouse_down) = (false, false);
 	
 	// I did not go into this intending to make this code good. Sorry
 	
 	while win.is_open() {
-		if redraw {
-			if let Some((x, y)) = win.get_mouse_pos(minifb::MouseMode::Pass) {
-				mouse = (x as Coord, y as Coord);
-			}
-			let mouse = (mouse.0 + 48, mouse.1);
-		
-			// Clear screen.
-			buffer.fill(0x201d1a);
-			
-			let (a, b) =
-			if win.get_mouse_down(minifb::MouseButton::Left) {
-				((64, 96), mouse)
-			} else {
-				(mouse, (64, 96))
-			};
-			
-			let shift = win.is_key_down(Key::LeftShift) || win.is_key_down(Key::RightShift);
-			if let Some(keys) = win.get_keys_pressed(minifb::KeyRepeat::Yes) {
-				for k in keys {
-					if let Some(ch) = key_to_char(k, shift) {
-						if ch == '\x08' {
-							specimen.pop();
-						} else {
-							specimen.push(ch);
-						}
-					}
-				}
-			}
-			
-			// const COOL_COLORS: [u32; 8] = [0xFFFFFF, 0xFB4934, 0xFE8019, 0xFABD2F, 0xB8BB26, 0x8EC07C, 0x83A598, 0xD3869B];
-			const COOL_COLORS: [u32; 8] = [0xFFFFFF, 0xCC241D, 0xD65D0E, 0xD79921, 0x98971A, 0x689D6A, 0x458588, 0xB16286];
-			
-			draw_hershey_char(&mut buffer, &fonts[cur_font].1[cur_char], a, 3, COOL_COLORS[0]);
-			let tooltip = format!("{} (#{}) ch{}", fonts[cur_font].0, cur_font, cur_char);
-			draw_hershey_str(&mut buffer, &ui_font.unwrap().1, &tooltip, (a.0 + 128, a.1), 1, COOL_COLORS[0]);
-			draw_hershey_str(&mut buffer, &fonts[cur_font].1, &specimen, b, 2, COOL_COLORS[0]);
-			
-			redraw = false;
+		if let Some((x, y)) = win.get_mouse_pos(minifb::MouseMode::Discard) {
+			mouse = (x as Coord, y as Coord);
 		}
 		
+		if win.get_mouse_down(minifb::MouseButton::Left) {
+			if !mouse_down && !mouse_click {
+				mouse_click = true;
+				mouse_down = false;
+			} else {
+				mouse_click = false;
+				mouse_down = true;
+			}
+		} else {
+			mouse_click = false;
+			mouse_down = false;
+		}
+		
+		let shift = win.is_key_down(Key::LeftShift) || win.is_key_down(Key::RightShift);
+		if let Some(keys) = win.get_keys_pressed(minifb::KeyRepeat::Yes) {
+			for k in keys {
+				if let Some(ch) = key_to_char(k, shift) {
+					if ch == '\x08' {
+						specimen.pop();
+					} else {
+						specimen.push(ch);
+					}
+					redraw = true;
+				}
+			}
+		}
+		
+		// Switch fonts
 		if cur_font > 0 && win.is_key_pressed(Key::Up, minifb::KeyRepeat::Yes) {
 			cur_font -= 1; redraw = true;
 		}
@@ -238,13 +218,90 @@ fn main() -> std::io::Result<()> {
 			cur_font += 1; redraw = true;
 		}
 		
-		if cur_char > 0 && win.is_key_pressed(Key::Left, minifb::KeyRepeat::Yes) {
-			cur_char -= 1; redraw = true;
+		// Switch pages
+		if win.is_key_pressed(Key::PageUp, minifb::KeyRepeat::Yes) {
+			cur_page = cur_page.back(); redraw = true;
 		}
-		if win.is_key_pressed(Key::Right, minifb::KeyRepeat::Yes) {
-			cur_char += 1; redraw = true;
+		if win.is_key_pressed(Key::PageDown, minifb::KeyRepeat::Yes) {
+			cur_page = cur_page.next(); redraw = true;
 		}
-		cur_char = 0.max(cur_char.min(fonts[cur_font].1.len() - 1));
+		
+		// Update loop
+		match cur_page {
+			Page::Help => {},
+			Page::Specimen => {
+				if font_size > 0.6 && win.is_key_pressed(Key::NumPadMinus, minifb::KeyRepeat::Yes) {
+					font_size -= 0.25; redraw = true;
+				}
+				if font_size < 7.0 && win.is_key_pressed(Key::NumPadPlus, minifb::KeyRepeat::Yes) {
+					font_size += 0.25; redraw = true;
+				}
+			},
+			Page::Map => {
+				let b4_char = cur_char;
+				if cur_char > 0 && win.is_key_pressed(Key::Left, minifb::KeyRepeat::Yes) {
+					cur_char -= 1;
+				}
+				if win.is_key_pressed(Key::Right, minifb::KeyRepeat::Yes) {
+					cur_char += 1;
+				}
+				cur_char = 0.max(cur_char.min(fonts[cur_font].1.len() - 1));
+				redraw |= b4_char != cur_char;
+			},
+		}
+		
+		if redraw {
+			redraw = false;
+			
+			// Clear screen.
+			buffer.fill(0x201d1a);
+			
+			let buf = &mut &mut buffer;
+			let font = &fonts[cur_font].1;
+			match cur_page {
+				Page::Help => {
+					const HELP_TEXT: &str = r"
+Help;
+
+Hello! Welcome to my Font Viewer.
+Use PgUp/PgDown to switch tabs.
+Use ^/v to switch fonts.
+
+Specimen:
+Use keyboard to write example.
+Use Numpad +/- to control size.
+
+Map:
+Use </> to switch characters.
+					";
+					draw_hershey_str(buf, ui_font, HELP_TEXT, (128, 48), 1.5, COOL_COLORS[0]);
+				},
+				Page::Specimen => {
+					let tooltip = format!("{}\n#{}: {} (x{:.2})", cur_page.get_name(), cur_font, fonts[cur_font].0, font_size);
+					draw_hershey_str(buf, ui_font, &tooltip, (32, HEIGHT as Coord - 64), 1.0, COOL_COLORS[0]);
+					
+					let specimen = if specimen.is_empty() { "Type some text..." } else { &specimen };
+					draw_hershey_str(buf, font, specimen, (64, 96), font_size, COOL_COLORS[0]);
+				},
+				Page::Map => {
+					let tooltip = format!("{}\n#{}: {}; {}", cur_page.get_name(), cur_font, fonts[cur_font].0, cur_char);
+					draw_hershey_str(buf, ui_font, &tooltip, (32, HEIGHT as Coord - 64), 1.0, COOL_COLORS[0]);
+					
+					const CHR_SIZE: f64 = 8.0;
+					
+					let chr = &font[cur_char];
+					let middle = (WIDTH as Coord / 2, HEIGHT as Coord / 2);
+					draw_hershey_char(buf, chr, middle, CHR_SIZE, COOL_COLORS[0]);
+					
+					let bottom = (middle.0, HEIGHT as Coord - 1);
+					let lh = ((chr.left_hand as f64 * CHR_SIZE) as Coord + bottom.0, bottom.1);
+					let rh = ((chr.right_hand as f64 * CHR_SIZE) as Coord + bottom.0, bottom.1);
+					draw_line(buf, lh, rh, 0x808080);
+					draw_line(buf, (lh.0, lh.1 - (HEIGHT as Coord / 16)), lh, 0x808080);
+					draw_line(buf, (rh.0, rh.1 - (HEIGHT as Coord / 16)), rh, 0x808080);
+				},
+			}
+		}
 		
 		win.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
 	}
@@ -267,22 +324,41 @@ fn v2i8_to_vec2(v: (i8, i8)) -> Vec2 {
 	(v.0 as Coord, v.1 as Coord)
 }
 
+/// simply don't draw br > tl
+fn draw_rect(buf: &mut Box<[u32]>, tl: Vec2, br: Vec2, c: u32) {
+	if !(vec2_within(tl) && vec2_within(br)) { return; }
+	
+	unsafe {
+		for x in tl.0..br.0 {
+			*buf.get_unchecked_mut(vec2_to_index((x, tl.1))) = c;
+			*buf.get_unchecked_mut(vec2_to_index((x, br.1))) = c;
+		}
+		for y in tl.1..br.1 {
+			*buf.get_unchecked_mut(vec2_to_index((tl.0, y))) = c;
+			*buf.get_unchecked_mut(vec2_to_index((br.0, y))) = c;
+		}
+	}
+}
+
 fn draw_line(buf: &mut Box<[u32]>, a: Vec2, b: Vec2, c: u32) {
 	if !(vec2_within(a) && vec2_within(b)) { return; }
 	
-	for p in Line::new(a, b) { unsafe {
-		*buf.get_unchecked_mut(vec2_to_index(p)) = c;
-	} }
+	unsafe {
+		for p in Line::new(a, b) {
+			*buf.get_unchecked_mut(vec2_to_index(p)) = c;
+		}
+	}
 }
 
-fn draw_hershey_char(buf: &mut Box<[u32]>, chr: &HersheyChar, p: Vec2, s: Coord, c: u32) {
+fn draw_hershey_char(buf: &mut Box<[u32]>, chr: &HersheyChar, p: Vec2, s: f64, c: u32) {
 	let mut pen_prev: Option<Vec2> = None;
 	
 	for mut v in chr.vertex_data.iter().map(|i|i.map(v2i8_to_vec2)) {
 		if let Some(v1) = v {
-			// let vr = (rng.generate_range(-1..=1), rng.generate_range(-1..=1));
-			let vr = (0, 0);
-			let v1 = (v1.0 * s + p.0 + vr.0, v1.1 * s + p.1 + vr.1);
+			let v1 = (
+				(v1.0 as f64 * s).round() as Coord + p.0,
+				(v1.1 as f64 * s).round() as Coord + p.1
+			);
 			v = Some(v1);
 			if let Some(v2) = pen_prev {
 				draw_line(buf, v1, v2, c);
@@ -291,16 +367,11 @@ fn draw_hershey_char(buf: &mut Box<[u32]>, chr: &HersheyChar, p: Vec2, s: Coord,
 		// pen_prev = v.map(v2i8_to_vec2);
 		pen_prev = v;
 	}
-	
-	/*let vofs = s * 4;
-	let lh = (chr.left_hand as Coord * s + p.0, p.1 + vofs);
-	let rh = (chr.right_hand as Coord * s + p.0, p.1 + vofs);
-	draw_line(buf, lh, rh, 0x808080);
-	draw_line(buf, (lh.0, lh.1 - s), (lh.0, lh.1 + s), 0x808080);
-	draw_line(buf, (rh.0, rh.1 - s), (rh.0, rh.1 + s), 0x808080);*/
 }
 
-fn draw_hershey_str(buf: &mut Box<[u32]>, font: &[HersheyChar], st: &str, p: Vec2, s: Coord, c: u32) {
+// does it show that this was hacked together?
+// TODO: fix kerning
+fn draw_hershey_str(buf: &mut Box<[u32]>, font: &[HersheyChar], st: &str, p: Vec2, s: f64, c: u32) {
 	let mut ofs = (0, 0);
 	for ch in st.bytes() {
 		if ch == b'\n' {
@@ -308,11 +379,14 @@ fn draw_hershey_str(buf: &mut Box<[u32]>, font: &[HersheyChar], st: &str, p: Vec
 			continue;
 		}
 		
-		let ch = (ch - b' ') as usize;
+		let ch = ch.saturating_sub(b' ') as usize;
 		let ch = font.get(ch);
 		if let Some(ch) = ch {
 			let w = (ch.right_hand - ch.left_hand) as Coord;
-			draw_hershey_char(buf, ch, (p.0 - ch.left_hand as Coord + ofs.0 * s, p.1 + ofs.1 * s), s, c);
+			draw_hershey_char(buf, ch, (
+				p.0 - ch.left_hand as Coord + ((ofs.0 as f64) * s) as Coord,
+				p.1 + ((ofs.1 as f64) * s) as Coord
+			), s, c);
 			ofs.0 += w;
 		}
 	}

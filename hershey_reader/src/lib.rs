@@ -123,52 +123,6 @@ impl HersheyChar {
 mod tests {
 	use super::*;
 	
-	/*
-	#[derive(Debug)]
-	enum DumpingError {
-		Io(std::io::Error),
-		Hershey(HersheyError),
-	}
-	impl From<std::io::Error> for DumpingError {
-		fn from(e: std::io::Error) -> Self {
-			DumpingError::Io(e)
-		}
-	}
-	impl From<HersheyError> for DumpingError {
-		fn from(e: HersheyError) -> Self {
-			DumpingError::Hershey(e)
-		}
-	}
-	
-	#[test]
-	fn dump_characters_lol() -> Result<(), DumpingError> {
-		use std::fs::read_to_string;
-		use std::fs::File;
-		use std::io::Write;
-		
-		let jhf = read_to_string("../reference/futuram.jhf")?;
-		let mut out = File::create("../reference/futuram.jhf.txt")?;
-		
-		for line in jhf.trim().lines() {
-			let c = HersheyChar::new_from_str(line)?;
-			
-			write!(out,
-				"#{:5} ({:3} vtxs); ✋{:+3} 🤚{:+3} : ",
-				c.id, c.vertex_num, c.left_hand, c.right_hand
-			)?;
-			for vtx in c.vertex_data {
-				match vtx {
-					Some((x, y)) => write!(out, "({:+3}, {:+3}) ", x, y)?,
-					None => write!(out, "up ")?,
-				}
-			}
-			writeln!(out, "end")?;
-		}
-		
-		Ok(())
-	}
-	*/
-	
 	#[test]
 	fn decode_a_space() -> Result<(), HersheyError> {
 		// Space character
