@@ -167,6 +167,7 @@ OVER THE LAZY DOG
 		.1;
 	
 	let mut cur_char = 0;
+	let mut chrmap_camera = 0; // put this into a Page-by-Page state later
 	let mut cur_font = 0;
 	let mut cur_page = Page::Help;
 	let mut font_size = 1.0;
@@ -226,6 +227,8 @@ OVER THE LAZY DOG
 			cur_page = cur_page.next(); redraw = true;
 		}
 		
+		const GRID_CELLS: usize = 8;
+		
 		// Update loop
 		match cur_page {
 			Page::Help => {},
@@ -239,13 +242,33 @@ OVER THE LAZY DOG
 			},
 			Page::Map => {
 				let b4_char = cur_char;
+				
 				if cur_char > 0 && win.is_key_pressed(Key::Left, minifb::KeyRepeat::Yes) {
 					cur_char -= 1;
 				}
 				if win.is_key_pressed(Key::Right, minifb::KeyRepeat::Yes) {
 					cur_char += 1;
 				}
+				
+				let middle_x = WIDTH as Coord / 2;
+				if mouse_click && mouse.0 > middle_x {
+					let mouse = ((mouse.0 - middle_x) as f64 / middle_x as f64, mouse.1 as f64 / HEIGHT as f64);
+					let grid_cells = GRID_CELLS as f64;
+					let mouse = ((mouse.0 * grid_cells).floor() as Coord, (mouse.1 * grid_cells).floor() as Coord);
+					cur_char = ((mouse.0 + mouse.1 * GRID_CELLS as Coord) as usize) + chrmap_camera;
+				}
+				
 				cur_char = 0.max(cur_char.min(fonts[cur_font].1.len() - 1));
+				
+				if chrmap_camera + GRID_CELLS > cur_char && chrmap_camera >= GRID_CELLS {
+					chrmap_camera -= GRID_CELLS;
+				}
+				if chrmap_camera + (GRID_CELLS * (GRID_CELLS - 1)) <= cur_char {
+					chrmap_camera += GRID_CELLS;
+				}
+				
+				chrmap_camera = 0.max(chrmap_camera);
+				
 				redraw |= b4_char != cur_char;
 			},
 		}
@@ -285,13 +308,12 @@ Use </> to switch characters.
 				},
 				Page::Map => {
 					let tooltip = format!("{}\n#{}: {}; {}", cur_page.get_name(), cur_font, fonts[cur_font].0, cur_char);
-					draw_hershey_str(buf, ui_font, &tooltip, (32, 64), 1.0, COOL_COLORS[0]);
+					draw_hershey_str(buf, ui_font, &tooltip, (32, 64), 0.75, COOL_COLORS[0]);
 					
 					const CHR_SIZE: f64 = 8.0;
-					const GRID_CELLS: usize = 8;
 					
 					let chr = &font[cur_char];
-					let middle = (WIDTH as Coord / 6, HEIGHT as Coord / 2);
+					let middle = (WIDTH as Coord / 4, HEIGHT as Coord / 2);
 					draw_hershey_char(buf, chr, middle, CHR_SIZE, COOL_COLORS[0]);
 					
 					let grid_topleft = (WIDTH as f64 / 2.0, 0.0);
@@ -299,7 +321,7 @@ Use </> to switch characters.
 					
 					for j in 0..8 {
 						for i in 0..8 {
-							let ci = (i + j * 8) + (cur_char / GRID_CELLS) * GRID_CELLS;
+							let ci = (i + j * 8) + chrmap_camera;
 							
 							// hell
 							let topleft = (i as f64 / GRID_CELLS as f64, j as f64 / GRID_CELLS as f64);
