@@ -13,7 +13,7 @@ mod bresenham;
 use bresenham::*;
 			
 // const COOL_COLORS: [u32; 8] = [0xFFFFFF, 0xFB4934, 0xFE8019, 0xFABD2F, 0xB8BB26, 0x8EC07C, 0x83A598, 0xD3869B];
-const COOL_COLORS: [u32; 8] = [0xFFFFFF, 0xCC241D, 0xD65D0E, 0xD79921, 0x98971A, 0x689D6A, 0x458588, 0xB16286];
+const COOL_COLORS: [u32; 9] = [0xFFFFFF, 0xA89984, 0xCC241D, 0xD65D0E, 0xD79921, 0x98971A, 0x689D6A, 0x458588, 0xB16286];
 
 fn main() -> std::io::Result<()> {
 	let look_in = &std::env::args_os().nth(1)
@@ -42,7 +42,7 @@ fn main() -> std::io::Result<()> {
 			if let Some(ext) = path.extension().and_then(OsStr::to_str) {
 				if ext == "jhf" {
 					let jhf = read_to_string(&path)?;
-					let jhf = jhf.trim();
+					let jhf = jhf.trim_end();
 					
 					let mut font = Vec::new();
 					for line in jhf.lines() {
@@ -285,20 +285,55 @@ Use </> to switch characters.
 				},
 				Page::Map => {
 					let tooltip = format!("{}\n#{}: {}; {}", cur_page.get_name(), cur_font, fonts[cur_font].0, cur_char);
-					draw_hershey_str(buf, ui_font, &tooltip, (32, HEIGHT as Coord - 64), 1.0, COOL_COLORS[0]);
+					draw_hershey_str(buf, ui_font, &tooltip, (32, 64), 1.0, COOL_COLORS[0]);
 					
 					const CHR_SIZE: f64 = 8.0;
+					const GRID_CELLS: usize = 8;
 					
 					let chr = &font[cur_char];
-					let middle = (WIDTH as Coord / 2, HEIGHT as Coord / 2);
+					let middle = (WIDTH as Coord / 6, HEIGHT as Coord / 2);
 					draw_hershey_char(buf, chr, middle, CHR_SIZE, COOL_COLORS[0]);
+					
+					let grid_topleft = (WIDTH as f64 / 2.0, 0.0);
+					let grid_bottomright = ((WIDTH - 1) as f64, (HEIGHT - 1) as f64);
+					
+					for j in 0..8 {
+						for i in 0..8 {
+							let ci = (i + j * 8) + (cur_char / GRID_CELLS) * GRID_CELLS;
+							
+							// hell
+							let topleft = (i as f64 / GRID_CELLS as f64, j as f64 / GRID_CELLS as f64);
+							let center = ((i as f64 + 0.5) / GRID_CELLS as f64, (j as f64 + 0.5) / GRID_CELLS as f64);
+							let bottomright = ((i as f64 + 1.0) / GRID_CELLS as f64, (j as f64 + 1.0) / GRID_CELLS as f64);
+							
+							let tl = lerp_vec(grid_topleft, grid_bottomright, topleft);
+							let cpos = lerp_vec(grid_topleft, grid_bottomright, center);
+							let br = lerp_vec(grid_topleft, grid_bottomright, bottomright);
+							
+							let tl = (tl.0.round() as Coord, tl.1.round() as Coord);
+							let br = (br.0.round() as Coord, br.1.round() as Coord);
+							
+							let cpos = (cpos.0.round() as Coord, cpos.1.round() as Coord);
+							
+							if let Some(chr) = font.get(ci) {
+								draw_rect(buf, tl, br, COOL_COLORS[1]);
+								draw_hershey_char(buf, chr, cpos, 1.0, COOL_COLORS[0]);
+								
+								let is_current = ci == cur_char;
+								if is_current {
+									const INSET_AMT: Coord = 2;
+									draw_rect(buf, (tl.0 + INSET_AMT, tl.1 + INSET_AMT), (br.0 - INSET_AMT, br.1 - INSET_AMT), COOL_COLORS[1]);
+								}
+							}
+						}
+					}
 					
 					let bottom = (middle.0, HEIGHT as Coord - 1);
 					let lh = ((chr.left_hand as f64 * CHR_SIZE) as Coord + bottom.0, bottom.1);
 					let rh = ((chr.right_hand as f64 * CHR_SIZE) as Coord + bottom.0, bottom.1);
-					draw_line(buf, lh, rh, 0x808080);
-					draw_line(buf, (lh.0, lh.1 - (HEIGHT as Coord / 16)), lh, 0x808080);
-					draw_line(buf, (rh.0, rh.1 - (HEIGHT as Coord / 16)), rh, 0x808080);
+					draw_line(buf, lh, rh, COOL_COLORS[1]);
+					draw_line(buf, (lh.0, lh.1 - (HEIGHT as Coord / 16)), lh, COOL_COLORS[1]);
+					draw_line(buf, (rh.0, rh.1 - (HEIGHT as Coord / 16)), rh, COOL_COLORS[1]);
 				},
 			}
 		}
@@ -307,6 +342,15 @@ Use </> to switch characters.
 	}
 	
 	Ok(())
+}
+
+#[inline]
+fn lerp(a: f64, b: f64, p: f64) -> f64 {
+	(b - a) * p + a
+}
+
+fn lerp_vec(a: (f64, f64), b: (f64, f64), p: (f64, f64)) -> (f64, f64) {
+	(lerp(a.0, b.0, p.0), lerp(a.1, b.1, p.1))
 }
 
 fn vec2_within(a: Vec2) -> bool {
