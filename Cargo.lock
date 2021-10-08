@@ -237,7 +237,6 @@ version = "0.1.0"
 dependencies = [
  "hershey_reader",
  "minifb",
- "nanorand",
 ]
 
 [[package]]
@@ -341,12 +340,6 @@ dependencies = [
  "adler",
  "autocfg",
 ]
-
-[[package]]
-name = "nanorand"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "729eb334247daa1803e0a094d0a5c55711b85571179f5ec6e53eccfdf7008958"
 
 [[package]]
 name = "nix"

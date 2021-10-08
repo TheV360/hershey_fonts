@@ -1,4 +1,5 @@
-pub type Vec2 = (isize, isize);
+pub type Coord = i32;
+pub type Vec2 = (Coord, Coord);
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -60,8 +61,8 @@ impl Octant {
 pub struct Line {
 	position: Vec2,
 	delta: Vec2,
-	target_x: isize,
-	diff: isize,
+	target_x: Coord,
+	diff: Coord,
 	octant: Octant,
 }
 impl Line {
