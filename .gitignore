@@ -1,4 +1,4 @@
 /target
-fonts/
+# fonts/
 garbo/
 *.jhf.txt
