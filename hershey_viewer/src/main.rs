@@ -428,7 +428,7 @@ fn draw_hershey_str(buf: &mut Box<[u32]>, font: &[HersheyChar], st: &str, p: Vec
 		if let Some(ch) = ch {
 			let w = (ch.right_hand - ch.left_hand) as Coord;
 			draw_hershey_char(buf, ch, (
-				p.0 - ch.left_hand as Coord + ((ofs.0 as f64) * s) as Coord,
+				p.0 + ((ofs.0 - ch.left_hand as Coord) as f64 * s) as Coord,
 				p.1 + ((ofs.1 as f64) * s) as Coord
 			), s, c);
 			ofs.0 += w;
