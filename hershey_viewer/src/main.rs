@@ -11,6 +11,9 @@ const HEIGHT: usize = 720;
 
 mod bresenham;
 use bresenham::*;
+
+const CORNER: Vec2 = (WIDTH as Coord, HEIGHT as Coord);
+const CENTER: Vec2 = (CORNER.0 / 2, CORNER.1 / 2);
 			
 // const COOL_COLORS: [u32; 8] = [0xFFFFFF, 0xFB4934, 0xFE8019, 0xFABD2F, 0xB8BB26, 0x8EC07C, 0x83A598, 0xD3869B];
 const COOL_COLORS: [u32; 9] = [0xFFFFFF, 0xA89984, 0xCC241D, 0xD65D0E, 0xD79921, 0x98971A, 0x689D6A, 0x458588, 0xB16286];
@@ -45,10 +48,10 @@ fn main() -> std::io::Result<()> {
 					let jhf = jhf.trim_end();
 					
 					let mut font = Vec::new();
-					for line in jhf.lines() {
+					for (ln, line) in jhf.lines().enumerate() {
 						match HersheyChar::new_from_str(line) {
 							Ok(chr) => font.push(chr),
-							Err(x) => panic!("`{}`\nCouldn't parse, {:?}", line, x),
+							Err(x) => panic!("`{}`\nIn file {}:{}, couldn't parse, {:?}", line, path.to_string_lossy(), ln, x),
 						}
 					}
 					
@@ -74,7 +77,7 @@ fn main() -> std::io::Result<()> {
 			scale: Scale::X1,
 			..Default::default()
 		}
-	).unwrap();
+	).expect("Failed to open window!");
 	
 	let mut specimen = r"
 the quick brown fox jumped
@@ -128,7 +131,6 @@ OVER THE LAZY DOG
 		}
 	}
 	
-	
 	enum Page {
 		Help,
 		Specimen,
@@ -166,8 +168,17 @@ OVER THE LAZY DOG
 		.unwrap_or_else(|| fonts.first().unwrap())
 		.1;
 	
+	let mut specimen = r"
+the quick brown fox jumped
+over the lazy dog
+THE QUICK BROWN FOX JUMPED
+OVER THE LAZY DOG
+(0123456789)
+<HTML> ? @
+	".trim().to_string();
+	
 	let mut cur_char = 0;
-	let mut chrmap_camera = 0; // put this into a Page-by-Page state later
+	let mut chrmap_view = 0; // put this into a Page-by-Page state later
 	let mut cur_font = 0;
 	let mut cur_page = Page::Help;
 	let mut font_size = 1.0;
@@ -176,12 +187,18 @@ OVER THE LAZY DOG
 	// gonna use this for gfx buttons
 	let mut mouse = (0, 0);
 	let (mut mouse_click, mut mouse_down) = (false, false);
+	let mut mouse_scroll;
 	
 	// I did not go into this intending to make this code good. Sorry
 	
 	while win.is_open() {
 		if let Some((x, y)) = win.get_mouse_pos(minifb::MouseMode::Discard) {
 			mouse = (x as Coord, y as Coord);
+		}
+		if let Some((x, y)) = win.get_scroll_wheel() {
+			mouse_scroll = (x as Coord, y as Coord);
+		} else {
+			mouse_scroll = (0, 0);
 		}
 		
 		if win.get_mouse_down(minifb::MouseButton::Left) {
@@ -218,6 +235,7 @@ OVER THE LAZY DOG
 		if cur_font < fonts.len() - 1 && win.is_key_pressed(Key::Down, minifb::KeyRepeat::Yes) {
 			cur_font += 1; redraw = true;
 		}
+		let font = &fonts[cur_font];
 		
 		// Switch pages
 		if win.is_key_pressed(Key::PageUp, minifb::KeyRepeat::Yes) {
@@ -227,16 +245,23 @@ OVER THE LAZY DOG
 			cur_page = cur_page.next(); redraw = true;
 		}
 		
-		const GRID_CELLS: usize = 8;
+		const GRID_CELLS: Vec2 = (8, 7);
+		
+		const CHRMAP_TL: Vec2 = (CENTER.0, 32);
+		const CHRMAP_BR: Vec2 = (CORNER.0 - 1, CORNER.1 - 1);
+		
+		const GRID_CELLS_F: (f64, f64) = (GRID_CELLS.0 as f64, GRID_CELLS.1 as f64);
+		const CHRMAP_TL_F: (f64, f64) = (CHRMAP_TL.0 as f64, CHRMAP_TL.1 as f64);
+		const CHRMAP_BR_F: (f64, f64) = (CHRMAP_BR.0 as f64, CHRMAP_BR.1 as f64);
 		
 		// Update loop
 		match cur_page {
 			Page::Help => {},
 			Page::Specimen => {
-				if font_size > 0.6 && win.is_key_pressed(Key::NumPadMinus, minifb::KeyRepeat::Yes) {
+				if font_size > 0.51 && win.is_key_pressed(Key::NumPadMinus, minifb::KeyRepeat::Yes) {
 					font_size -= 0.25; redraw = true;
 				}
-				if font_size < 7.0 && win.is_key_pressed(Key::NumPadPlus, minifb::KeyRepeat::Yes) {
+				if font_size < 6.99 && win.is_key_pressed(Key::NumPadPlus, minifb::KeyRepeat::Yes) {
 					font_size += 0.25; redraw = true;
 				}
 			},
@@ -250,26 +275,37 @@ OVER THE LAZY DOG
 					cur_char += 1;
 				}
 				
-				let middle_x = WIDTH as Coord / 2;
-				if mouse_click && mouse.0 > middle_x {
-					let mouse = ((mouse.0 - middle_x) as f64 / middle_x as f64, mouse.1 as f64 / HEIGHT as f64);
-					let grid_cells = GRID_CELLS as f64;
-					let mouse = ((mouse.0 * grid_cells).floor() as Coord, (mouse.1 * grid_cells).floor() as Coord);
-					cur_char = ((mouse.0 + mouse.1 * GRID_CELLS as Coord) as usize) + chrmap_camera;
+				let chrmap_camera_max = 0.max((font.1.len() as Coord - 1) / GRID_CELLS.0 + 1 - GRID_CELLS.1);
+				
+				if vec2_within_bounds(mouse, CHRMAP_TL, CHRMAP_BR) {
+					if mouse_click {
+						let mouse = invlerp_vec(CHRMAP_TL_F, CHRMAP_BR_F, (mouse.0 as f64, mouse.1 as f64));
+						let mouse = ((mouse.0 * GRID_CELLS_F.0).floor() as Coord, (mouse.1 * GRID_CELLS_F.1).floor() as Coord);
+						cur_char = (mouse.0 + (mouse.1 + chrmap_view) * GRID_CELLS.0) as usize;
+						cur_char = 0.max(cur_char.min(font.1.len() - 1));
+					}
+					if mouse_scroll != (0, 0) {
+						let dir = mouse_scroll.1.signum();
+						chrmap_view -= dir;
+						redraw = true;
+					}
 				}
 				
-				cur_char = 0.max(cur_char.min(fonts[cur_font].1.len() - 1));
+				cur_char = 0.max(cur_char.min(font.1.len() - 1));
 				
-				if chrmap_camera + GRID_CELLS > cur_char && chrmap_camera >= GRID_CELLS {
-					chrmap_camera -= GRID_CELLS;
+				if b4_char != cur_char {
+					let cur_row = cur_char as Coord / GRID_CELLS.0;
+					if chrmap_view >= cur_row {
+						chrmap_view -= 1;
+					}
+					if chrmap_view + GRID_CELLS.1 - 1 <= cur_row {
+						chrmap_view += 1;
+					}
+					
+					redraw = true;
 				}
-				if chrmap_camera + (GRID_CELLS * (GRID_CELLS - 1)) <= cur_char {
-					chrmap_camera += GRID_CELLS;
-				}
 				
-				chrmap_camera = 0.max(chrmap_camera);
-				
-				redraw |= b4_char != cur_char;
+				chrmap_view = 0.max(chrmap_view.min(chrmap_camera_max));
 			},
 		}
 		
@@ -279,12 +315,11 @@ OVER THE LAZY DOG
 			// Clear screen.
 			buffer.fill(0x201d1a);
 			
-			let buf = &mut &mut buffer;
-			let font = &fonts[cur_font].1;
+			let buf = &mut buffer;
 			match cur_page {
 				Page::Help => {
 					const HELP_TEXT: &str = r"
-Help;
+Help
 
 Hello! Welcome to my Font Viewer.
 Use PgUp/PgDown to switch tabs.
@@ -295,62 +330,61 @@ Use keyboard to write example.
 Use Numpad +/- to control size.
 
 Map:
-Use </> to switch characters.
+Use </>/Click to select.
+Use scroll wheel to scroll.
 					";
-					draw_hershey_str(buf, ui_font, HELP_TEXT, (128, 48), 1.5, COOL_COLORS[0]);
+					draw_hershey_str(buf, ui_font, HELP_TEXT, (64, 24), 1.5, COOL_COLORS[0]);
 				},
 				Page::Specimen => {
-					let tooltip = format!("{}\n#{}: {} (x{:.2})", cur_page.get_name(), cur_font, fonts[cur_font].0, font_size);
+					let tooltip = format!("{}\n#{}: {} (x{:.2})", cur_page.get_name(), cur_font, font.0, font_size);
 					draw_hershey_str(buf, ui_font, &tooltip, (32, HEIGHT as Coord - 64), 1.0, COOL_COLORS[0]);
 					
 					let specimen = if specimen.is_empty() { "Type some text..." } else { &specimen };
-					draw_hershey_str(buf, font, specimen, (64, 96), font_size, COOL_COLORS[0]);
+					draw_hershey_str(buf, &font.1, specimen, (64, 96), font_size, COOL_COLORS[0]);
 				},
 				Page::Map => {
-					let tooltip = format!("{}\n#{}: {}; {}", cur_page.get_name(), cur_font, fonts[cur_font].0, cur_char);
-					draw_hershey_str(buf, ui_font, &tooltip, (32, 64), 0.75, COOL_COLORS[0]);
+					let tooltip = format!("{}\n#{}: {}; {}", cur_page.get_name(), cur_font, font.0, cur_char);
+					draw_hershey_str(buf, ui_font, &tooltip, (32, 40), 0.75, COOL_COLORS[0]);
 					
 					const CHR_SIZE: f64 = 8.0;
 					
-					let chr = &font[cur_char];
-					let middle = (WIDTH as Coord / 4, HEIGHT as Coord / 2);
+					let chr = &font.1[cur_char];
+					let middle = (CENTER.0 / 2, CENTER.1);
 					draw_hershey_char(buf, chr, middle, CHR_SIZE, COOL_COLORS[0]);
 					
-					let grid_topleft = (WIDTH as f64 / 2.0, 0.0);
-					let grid_bottomright = ((WIDTH - 1) as f64, (HEIGHT - 1) as f64);
-					
-					for j in 0..8 {
-						for i in 0..8 {
-							let ci = (i + j * 8) + chrmap_camera;
+					for j in 0..GRID_CELLS.1 {
+						for i in 0..GRID_CELLS.0 {
+							let ci = (i + (j + chrmap_view) * GRID_CELLS.0) as usize;
 							
 							// hell
-							let topleft = (i as f64 / GRID_CELLS as f64, j as f64 / GRID_CELLS as f64);
-							let center = ((i as f64 + 0.5) / GRID_CELLS as f64, (j as f64 + 0.5) / GRID_CELLS as f64);
-							let bottomright = ((i as f64 + 1.0) / GRID_CELLS as f64, (j as f64 + 1.0) / GRID_CELLS as f64);
+							let topleft = (i as f64 / GRID_CELLS_F.0, j as f64 / GRID_CELLS_F.1);
+							let center = ((i as f64 + 0.5) / GRID_CELLS_F.0, (j as f64 + 0.5) / GRID_CELLS_F.1);
+							let bottomright = ((i as f64 + 1.0) / GRID_CELLS_F.0, (j as f64 + 1.0) / GRID_CELLS_F.1);
 							
-							let tl = lerp_vec(grid_topleft, grid_bottomright, topleft);
-							let cpos = lerp_vec(grid_topleft, grid_bottomright, center);
-							let br = lerp_vec(grid_topleft, grid_bottomright, bottomright);
+							let tl = lerp_vec(CHRMAP_TL_F, CHRMAP_BR_F, topleft);
+							let ce = lerp_vec(CHRMAP_TL_F, CHRMAP_BR_F, center);
+							let br = lerp_vec(CHRMAP_TL_F, CHRMAP_BR_F, bottomright);
 							
-							let tl = (tl.0.round() as Coord, tl.1.round() as Coord);
-							let br = (br.0.round() as Coord, br.1.round() as Coord);
+							let tl = (tl.0.floor() as Coord, tl.1.floor() as Coord);
+							let br = (br.0.ceil() as Coord - 1, br.1.ceil() as Coord - 1);
 							
-							let cpos = (cpos.0.round() as Coord, cpos.1.round() as Coord);
+							let cpos = (ce.0.round() as Coord, ce.1.round() as Coord);
 							
-							if let Some(chr) = font.get(ci) {
-								draw_rect(buf, tl, br, COOL_COLORS[1]);
-								draw_hershey_char(buf, chr, cpos, 1.0, COOL_COLORS[0]);
-								
+							if let Some(chr) = font.1.get(ci) {
 								let is_current = ci == cur_char;
+								
+								draw_rect(buf, tl, br, COOL_COLORS[1]);
+								draw_hershey_char(buf, chr, cpos, if is_current { 1.25 } else { 1.0 }, COOL_COLORS[0]);
+								
 								if is_current {
-									const INSET_AMT: Coord = 2;
+									const INSET_AMT: Coord = 3;
 									draw_rect(buf, (tl.0 + INSET_AMT, tl.1 + INSET_AMT), (br.0 - INSET_AMT, br.1 - INSET_AMT), COOL_COLORS[1]);
 								}
 							}
 						}
 					}
 					
-					let bottom = (middle.0, HEIGHT as Coord - 1);
+					let bottom = (middle.0, CORNER.1 - 1);
 					let lh = ((chr.left_hand as f64 * CHR_SIZE) as Coord + bottom.0, bottom.1);
 					let rh = ((chr.right_hand as f64 * CHR_SIZE) as Coord + bottom.0, bottom.1);
 					draw_line(buf, lh, rh, COOL_COLORS[1]);
@@ -368,21 +402,32 @@ Use </> to switch characters.
 
 #[inline]
 fn lerp(a: f64, b: f64, p: f64) -> f64 {
-	(b - a) * p + a
+	((1.0 - p) * a) + (p * b)
+}
+#[inline]
+fn invlerp(a: f64, b: f64, v: f64) -> f64 {
+	(v - a) / (b - a)
 }
 
 fn lerp_vec(a: (f64, f64), b: (f64, f64), p: (f64, f64)) -> (f64, f64) {
 	(lerp(a.0, b.0, p.0), lerp(a.1, b.1, p.1))
 }
+fn invlerp_vec(a: (f64, f64), b: (f64, f64), v: (f64, f64)) -> (f64, f64) {
+	(invlerp(a.0, b.0, v.0), invlerp(a.1, b.1, v.1))
+}
 
 fn vec2_within(a: Vec2) -> bool {
-	a.0 >= 0 && a.0 < WIDTH as Coord &&
-	a.1 >= 0 && a.1 < HEIGHT as Coord
+	a.0 >= 0 && a.0 < CORNER.0 &&
+	a.1 >= 0 && a.1 < CORNER.1
+}
+fn vec2_within_bounds(a: Vec2, tl: Vec2, br: Vec2) -> bool {
+	a.0 >= tl.0 && a.0 < br.0 &&
+	a.1 >= tl.1 && a.1 < br.1
 }
 
 #[inline]
 fn vec2_to_index(a: Vec2) -> usize {
-	(a.0 + a.1 * WIDTH as Coord) as usize
+	(a.0 + a.1 * CORNER.0) as usize
 }
 
 #[inline]
@@ -392,14 +437,14 @@ fn v2i8_to_vec2(v: (i8, i8)) -> Vec2 {
 
 /// simply don't draw br > tl
 fn draw_rect(buf: &mut Box<[u32]>, tl: Vec2, br: Vec2, c: u32) {
-	if !(vec2_within(tl) && vec2_within(br)) { return; }
+	if !vec2_within(tl) || !vec2_within(br) { return; }
 	
 	unsafe {
-		for x in tl.0..br.0 {
+		for x in tl.0..=br.0 {
 			*buf.get_unchecked_mut(vec2_to_index((x, tl.1))) = c;
 			*buf.get_unchecked_mut(vec2_to_index((x, br.1))) = c;
 		}
-		for y in tl.1..br.1 {
+		for y in (tl.1..br.1).skip(1) {
 			*buf.get_unchecked_mut(vec2_to_index((tl.0, y))) = c;
 			*buf.get_unchecked_mut(vec2_to_index((br.0, y))) = c;
 		}
@@ -407,7 +452,7 @@ fn draw_rect(buf: &mut Box<[u32]>, tl: Vec2, br: Vec2, c: u32) {
 }
 
 fn draw_line(buf: &mut Box<[u32]>, a: Vec2, b: Vec2, c: u32) {
-	if !(vec2_within(a) && vec2_within(b)) { return; }
+	if !vec2_within(a) || !vec2_within(b) { return; }
 	
 	unsafe {
 		for p in Line::new(a, b) {
@@ -419,18 +464,18 @@ fn draw_line(buf: &mut Box<[u32]>, a: Vec2, b: Vec2, c: u32) {
 fn draw_hershey_char(buf: &mut Box<[u32]>, chr: &HersheyChar, p: Vec2, s: f64, c: u32) {
 	let mut pen_prev: Option<Vec2> = None;
 	
-	for mut v in chr.vertex_data.iter().map(|i|i.map(v2i8_to_vec2)) {
+	for v in chr.vertex_data.iter() {
+		let mut v = v.map(v2i8_to_vec2);
 		if let Some(v1) = v {
 			let v1 = (
-				(v1.0 as f64 * s).round() as Coord + p.0,
-				(v1.1 as f64 * s).round() as Coord + p.1
+				p.0 + (v1.0 as f64 * s).round() as Coord,
+				p.1 + (v1.1 as f64 * s).round() as Coord
 			);
 			v = Some(v1);
 			if let Some(v2) = pen_prev {
 				draw_line(buf, v1, v2, c);
 			}
 		}
-		// pen_prev = v.map(v2i8_to_vec2);
 		pen_prev = v;
 	}
 }
@@ -439,6 +484,7 @@ fn draw_hershey_char(buf: &mut Box<[u32]>, chr: &HersheyChar, p: Vec2, s: f64, c
 // TODO: fix kerning
 fn draw_hershey_str(buf: &mut Box<[u32]>, font: &[HersheyChar], st: &str, p: Vec2, s: f64, c: u32) {
 	let mut ofs = (0, 0);
+	
 	for ch in st.bytes() {
 		if ch == b'\n' {
 			ofs = (0, ofs.1 + 32);
@@ -449,10 +495,11 @@ fn draw_hershey_str(buf: &mut Box<[u32]>, font: &[HersheyChar], st: &str, p: Vec
 		let ch = font.get(ch);
 		if let Some(ch) = ch {
 			let w = (ch.right_hand - ch.left_hand) as Coord;
-			draw_hershey_char(buf, ch, (
+			let p = (
 				p.0 + ((ofs.0 - ch.left_hand as Coord) as f64 * s) as Coord,
 				p.1 + ((ofs.1 as f64) * s) as Coord
-			), s, c);
+			);
+			draw_hershey_char(buf, ch, p, s, c);
 			ofs.0 += w;
 		}
 	}
